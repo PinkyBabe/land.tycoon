@@ -916,14 +916,15 @@ function createFaceIcon(avatarUrl, displayName, isSelf=false) {
   const safeUrl  = escapeHtml_(avatarUrl || '');
   const ring = isSelf ? 'style="border-color: rgba(240,165,0,0.95); box-shadow: 0 0 20px rgba(240,165,0,0.28), 0 0 40px rgba(240,165,0,0.14)"' : '';
   const html = `
-    <div style="display:flex;flex-direction:column;align-items:center">
+    <div style="display:flex;flex-direction:column;align-items:center;min-width:120px">
       <div class="user-face-marker" ${ring}>
         <img src="${safeUrl}" alt="face" onerror="this.style.display='none'">
       </div>
-      <div class="user-face-label">${safeName}</div>
+      <div class="user-face-label" style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${safeName}</div>
     </div>
   `;
-  return L.divIcon({ html, className:'', iconSize:[48, 54], iconAnchor:[24, 27] });
+  // Wider icon box prevents letter-by-letter wrapping.
+  return L.divIcon({ html, className:'', iconSize:[140, 64], iconAnchor:[70, 28] });
 }
 
 function createSelfIcon() {

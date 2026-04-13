@@ -737,7 +737,7 @@ body::before {
 // ╔═══════════════════════════════════════════════════╗
 // ║  CONFIG — replace with your Apps Script URL       ║
 // ╚═══════════════════════════════════════════════════╝
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2Kk9Z0mmH4REuybyUWT8_29SeH0AgaMw5cSwK_m4lagnpmVTGgdVEAq9M_BkToFbo_g/exec";
+const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
 
 // ─── State ────────────────────────────────────────────
 const state = {
@@ -1115,20 +1115,23 @@ function showShoutMarker([lat, lng], msg) {
 }
 
 // ─── Google Sheets integration ────────────────────────
+// Apps Script CORS fix: use no-cors + URLSearchParams to avoid preflight.
+// The response will be opaque (unreadable), so client-side Turf overlap
+// check is the primary guard; the server is the durable storage layer.
 async function postToSheet(payload) {
   if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') {
     console.warn('Apps Script URL not set — skipping server save.');
     return { status: 'ok' };
   }
-  const res = await fetch(APPS_SCRIPT_URL, {
+  const params = new URLSearchParams();
+  params.append('payload', JSON.stringify(payload));
+  // no-cors avoids the preflight OPTIONS request that Apps Script rejects
+  await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
-    body:   JSON.stringify(payload),
-    headers:{ 'Content-Type':'application/json' }
+    mode:   'no-cors',
+    body:   params
   });
-  const data = await res.json();
-  if (data.status === 'overlap') throw new Error('Server: ' + data.message);
-  if (data.status === 'error')   throw new Error(data.message);
-  return data;
+  return { status: 'ok' }; // response is opaque, assume ok
 }
 
 async function loadExistingParcels() {
@@ -1137,6 +1140,7 @@ async function loadExistingParcels() {
     return;
   }
   try {
+    // GET requests don't trigger preflight — read works fine
     const res  = await fetch(APPS_SCRIPT_URL + '?action=getParcels');
     const data = await res.json();
     if (data.status !== 'ok') return;

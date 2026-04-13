@@ -210,6 +210,28 @@ body::before {
   align-items: stretch;
 }
 
+/* ── CHAT BAR ────────────────────────────────────── */
+#chat-bar {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#chat-input.input-tycoon {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+#chat-send.btn-tycoon {
+  flex: 0 0 auto;
+  width: 92px;
+  max-width: none;
+  min-height: 42px;
+  background: linear-gradient(135deg, rgba(0,229,255,0.22) 0%, rgba(240,165,0,0.22) 100%);
+  border: 1px solid rgba(240,165,0,0.3);
+  color: var(--text);
+}
+
 /* ── BUTTONS ─────────────────────────────────────── */
 .btn-tycoon {
   font-family: 'Rajdhani', sans-serif;

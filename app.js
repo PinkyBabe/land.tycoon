@@ -388,6 +388,139 @@ function showShoutMarker([lat, lng], msg) {
   setTimeout(() => map.removeLayer(m), 6000);
 }
 
+// ─── Chat pop dialog (5s) ───────────────────────────
+function getMarkerLatLngForDevice_(deviceId) {
+  const id = String(deviceId || '');
+  if (!id) return null;
+
+  if (String(state.deviceId) === id && state.liveMarker && state.liveMarker.getLatLng) {
+    const ll = state.liveMarker.getLatLng();
+    return ll ? [ll.lat, ll.lng] : null;
+  }
+
+  const m = state.otherUsers && state.otherUsers.get ? state.otherUsers.get(id) : null;
+  if (m && m.getLatLng) {
+    const ll = m.getLatLng();
+    return ll ? [ll.lat, ll.lng] : null;
+  }
+  return null;
+}
+
+function showChatDialog(deviceId, fallbackPos, name, avatarUrl, message) {
+  const safeName = escapeHtml_(name || 'Tycoon');
+  const safeUrl  = escapeHtml_(avatarUrl || '');
+  const safeMsg  = escapeHtml_(message || '');
+
+  const posFromMarker = getMarkerLatLngForDevice_(deviceId);
+  const pos = posFromMarker || fallbackPos || getChatPos_();
+  const lat = pos[0];
+  const lng = pos[1];
+
+  const icon = L.divIcon({
+    html: `<div style="
+      background:rgba(10,15,28,0.92);
+      border:1px solid rgba(240,165,0,0.55);
+      border-radius:12px;
+      padding:8px 10px;
+      font-family:'Rajdhani',sans-serif;
+      font-size:13px;
+      color:var(--text);
+      box-shadow:0 0 18px rgba(240,165,0,0.18);
+      max-width:240px;
+      line-height:1.25;
+    ">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <div style="width:26px;height:26px;border-radius:50%;overflow:hidden;border:2px solid rgba(0,229,255,0.55);flex:0 0 auto;background:rgba(0,229,255,0.08)">
+          <img src="${safeUrl}" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none'"/>
+        </div>
+        <div style="font-family:'Orbitron',monospace;font-size:10px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${safeName}
+        </div>
+      </div>
+      <div style="word-wrap:break-word;white-space:pre-wrap">${safeMsg}</div>
+    </div>`,
+    className: '',
+    iconAnchor: [0, 0]
+  });
+  const m = L.marker([lat, lng], { icon, interactive:false, zIndexOffset:1100 }).addTo(map);
+  setTimeout(() => { try { map.removeLayer(m); } catch(_) {} }, 5000);
+}
+
+function getChatPos_() {
+  if (state && Array.isArray(state.currentPos) && state.currentPos.length === 2) return state.currentPos;
+  return map.getCenter ? [map.getCenter().lat, map.getCenter().lng] : [7.0, 125.6];
+}
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  if (!input) return;
+  const message = (input.value || '').trim();
+  if (!message) return;
+
+  const [lat, lng] = getChatPos_();
+  input.value = '';
+
+  // Local instant dialog
+  showChatDialog(state.deviceId, [lat, lng], state.profile.displayName, state.profile.avatarUrl, message);
+
+  try {
+    await postToSheet({
+      action: 'chat',
+      deviceId: state.deviceId,
+      displayName: state.profile.displayName,
+      avatarUrl: state.profile.avatarUrl,
+      message,
+      lat, lng
+    }, { requireServer: true });
+  } catch (e) {
+    console.warn(e);
+    showToast('❌ Chat failed to send.', 'error');
+  }
+}
+
+const chatState = {
+  since: 0,
+  seen: new Set(),
+  timer: null,
+};
+
+async function fetchChat_() {
+  const url = APPS_SCRIPT_URL + `?action=chat&since=${encodeURIComponent(chatState.since || 0)}&limit=25`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!data || data.status !== 'ok' || !Array.isArray(data.messages)) return [];
+  return data.messages;
+}
+
+function startChatLoop_() {
+  if (chatState.timer) clearInterval(chatState.timer);
+
+  chatState.timer = setInterval(async () => {
+    try {
+      const msgs = await fetchChat_();
+      for (const m of msgs) {
+        const ts = Number(m.ts || 0);
+        if (ts && ts > chatState.since) chatState.since = ts;
+        const key = `${m.deviceId || ''}:${m.ts || ''}:${m.message || ''}`;
+        if (chatState.seen.has(key)) continue;
+        chatState.seen.add(key);
+
+        // Skip echo of self (we already show instantly)
+        if (String(m.deviceId) === String(state.deviceId)) continue;
+
+        const lat = parseFloat(m.lat);
+        const lng = parseFloat(m.lng);
+        const pos = (isFinite(lat) && isFinite(lng)) ? [lat, lng] : getChatPos_();
+        showChatDialog(m.deviceId, pos, m.displayName, m.avatarUrl, m.message);
+      }
+      // Prevent unbounded growth
+      if (chatState.seen.size > 400) {
+        chatState.seen = new Set(Array.from(chatState.seen).slice(-200));
+      }
+    } catch (_) {}
+  }, 2500);
+}
+
 // ─── Google Sheets integration ────────────────────────
 async function postToSheet(payload, opts = {}) {
   const requireServer = !!opts.requireServer;
@@ -962,7 +1095,18 @@ window.addEventListener('load', async () => {
   await loadExistingParcels();
   startGPSWatch();
   startOnlineLoop();
+  startChatLoop_();
 
   showToast('🏛 Welcome, Land Tycoon! Walk your land!', 'gold');
+});
+
+// Enter-to-send for chat
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const el = document.activeElement;
+  if (el && el.id === 'chat-input') {
+    e.preventDefault();
+    sendChat();
+  }
 });
 

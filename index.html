@@ -186,14 +186,32 @@ body::before {
   pointer-events: none;
 }
 
-.btn-start {
-  background: linear-gradient(135deg, #1a6b00 0%, #2d9200 100%);
+.btn-mark {
+  background: linear-gradient(135deg, #003d6b 0%, #0062aa 100%);
   color: #fff;
-  border: 1px solid #3db800;
-  box-shadow: 0 0 16px rgba(45,146,0,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
+  border: 1px solid #0090e0;
+  box-shadow: 0 0 16px rgba(0,144,224,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
+  font-size: clamp(13px, 3.8vw, 16px);
+  font-weight: 800;
+  letter-spacing: 1.5px;
 }
-.btn-start:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(45,146,0,0.6); }
-.btn-start:active { transform: translateY(1px); }
+.btn-mark:hover  { transform: translateY(-1px); box-shadow: 0 0 28px rgba(0,144,224,0.7); }
+.btn-mark:active { transform: scale(0.96); box-shadow: 0 0 8px rgba(0,144,224,0.3); }
+.btn-mark:disabled {
+  opacity: 0.45; cursor: not-allowed; transform: none;
+  box-shadow: none; filter: grayscale(0.4);
+}
+  background: linear-gradient(135deg, #004a00 0%, #007a00 100%);
+  border-color: #00c800;
+  box-shadow: 0 0 20px rgba(0,200,0,0.5);
+  animation: lockPulse 0.6s ease;
+}
+@keyframes lockPulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.93); }
+  70%  { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
 
 .btn-clear {
   background: linear-gradient(135deg, #4a1500 0%, #6b2000 100%);
@@ -641,17 +659,29 @@ body::before {
   <div id="lb-rows"></div>
 </div>
 
-<!-- ── POINT COUNTER BADGE ────────────────────────── -->
-<div id="pts-badge">NODES<span id="pts-count">0</span></div>
+<!-- ── GPS ACCURACY + NODE COUNTER BADGE ─────────── -->
+<div id="pts-badge" style="display:none">
+  <div style="display:flex;gap:10px;align-items:center">
+    <div style="text-align:center">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text-dim);letter-spacing:1px">NODES</div>
+      <span id="pts-count" style="color:var(--cyan);font-weight:700;font-size:14px;font-family:'Orbitron',monospace;display:block">0</span>
+    </div>
+    <div style="width:1px;height:28px;background:rgba(255,255,255,0.1)"></div>
+    <div style="text-align:center">
+      <div style="font-family:'Orbitron',monospace;font-size:7px;color:var(--text-dim);letter-spacing:1px">GPS ±</div>
+      <span id="acc-val" style="color:var(--green);font-weight:700;font-size:12px;font-family:'Orbitron',monospace;display:block">—</span>
+    </div>
+  </div>
+</div>
 
 <!-- ── BOTTOM HUD ──────────────────────────────────── -->
 <div id="hud-bottom">
-  <div id="status-bar">TAP MAP TO BEGIN CLAIMING LAND</div>
+  <div id="status-bar">WALK TO A CORNER AND PRESS MARK HERE</div>
   <div class="control-row">
-    <button class="btn-tycoon btn-start"  id="btn-start"  onclick="toggleClaiming()">
-      <span class="btn-icon">📍</span> Start Claim
+    <button class="btn-tycoon btn-mark" id="btn-mark" onclick="markHere()">
+      <span class="btn-icon">📍</span> Mark Here
     </button>
-    <button class="btn-tycoon btn-clear"  id="btn-clear"  onclick="clearPoints()">
+    <button class="btn-tycoon btn-clear" id="btn-clear" onclick="clearPoints()">
       <span class="btn-icon">🗑</span> Clear
     </button>
     <button class="btn-tycoon btn-finish" id="btn-finish" onclick="finishPolygon()" disabled>
@@ -711,50 +741,143 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2Kk9Z0mmH4REu
 
 // ─── State ────────────────────────────────────────────
 const state = {
-  isClaiming:    false,
-  points:        [],        // [[lat,lng], ...]
-  markers:       [],        // Leaflet markers
+  points:        [],        // [[lat,lng], ...]  from GPS
+  markers:       [],        // Leaflet node markers
+  liveMarker:    null,      // moving "you are here" marker
+  liveAccCircle: null,      // accuracy circle
   polyline:      null,      // live preview polyline
-  existingLayers:[],        // existing claim polygon layers
-  existingTurf:  [],        // existing claims as turf polygons
-  pendingCoords: null,      // coords awaiting modal submit
+  existingLayers:[],
+  existingTurf:  [],
+  pendingCoords: null,
   pendingArea:   0,
   deviceId:      getDeviceId(),
   portfolio:     { parcels:0, value:0, area:0 },
-  owners:        {},        // { ownerName: totalValue }
+  owners:        {},
+  gpsReady:      false,
+  currentPos:    null,      // latest GeolocationPosition
+  watchId:       null,
 };
 
 // ─── Map Initialization ───────────────────────────────
 const map = L.map('map', {
   center: [7.0, 125.6],
-  zoom: 14,
+  zoom: 17,
   zoomControl: true,
-  tap: true,
-  tapTolerance: 10,
+  tap: false,               // map taps no longer place points
   doubleClickZoom: false,
 });
 
-// Google Hybrid tile layer
 L.tileLayer(
   'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
   { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21 }
 ).addTo(map);
 
-// Locate user
-map.locate({ setView: true, maxZoom: 17 });
-map.on('locationfound', e => {
-  addPulseMarker(e.latlng);
-  showToast('📍 Location acquired!', 'info');
-});
+// ─── Live GPS Watch ───────────────────────────────────
+function startGPSWatch() {
+  if (!navigator.geolocation) {
+    showToast('❌ GPS not supported on this device.', 'error');
+    setStatus('GPS NOT AVAILABLE', 'error');
+    return;
+  }
 
-// ─── Map click handler ────────────────────────────────
-map.on('click', function(e) {
-  if (!state.isClaiming) return;
-  const latlng = [e.latlng.lat, e.latlng.lng];
-  addClaimPoint(latlng);
-});
+  setStatus('🛰 ACQUIRING GPS SIGNAL…', '');
 
-// ─── Pulse Marker (user location) ────────────────────
+  state.watchId = navigator.geolocation.watchPosition(
+    onGPSUpdate,
+    onGPSError,
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+  );
+}
+
+function onGPSUpdate(pos) {
+  const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+  state.currentPos = [lat, lng];
+  state.gpsReady   = true;
+
+  // First fix — fly to location
+  if (!state.liveMarker) {
+    map.setView([lat, lng], 19);
+  }
+
+  // Update live "you" marker
+  if (state.liveMarker) map.removeLayer(state.liveMarker);
+  if (state.liveAccCircle) map.removeLayer(state.liveAccCircle);
+
+  const icon = L.divIcon({
+    html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
+    className: '', iconSize:[16,16], iconAnchor:[8,8]
+  });
+  state.liveMarker    = L.marker([lat, lng], { icon, interactive:false, zIndexOffset:1000 }).addTo(map);
+  state.liveAccCircle = L.circle([lat, lng], {
+    radius: accuracy,
+    color: '#00e5ff', fillColor:'#00e5ff',
+    fillOpacity: 0.06, weight: 1, dashArray:'4 4'
+  }).addTo(map);
+
+  // Update accuracy badge
+  document.getElementById('pts-badge').style.display = 'block';
+  document.getElementById('acc-val').textContent = Math.round(accuracy) + 'm';
+
+  if (!state.gpsWasReady) {
+    state.gpsWasReady = true;
+    setStatus('WALK TO A CORNER — PRESS MARK HERE', '');
+    showToast(`📡 GPS locked! ±${Math.round(accuracy)}m accuracy`, 'info');
+    document.getElementById('btn-mark').disabled = false;
+  }
+}
+
+function onGPSError(err) {
+  const msgs = {
+    1: 'Location permission denied. Please allow GPS.',
+    2: 'GPS signal lost. Move to open sky.',
+    3: 'GPS timeout. Retrying…'
+  };
+  showToast('⚠ ' + (msgs[err.code] || 'GPS error'), 'error');
+  setStatus('GPS ERROR — CHECK PERMISSIONS', 'error');
+}
+
+// ─── MARK HERE — core action ─────────────────────────
+function markHere() {
+  if (!state.gpsReady || !state.currentPos) {
+    showToast('⏳ Waiting for GPS fix…', 'error');
+    return;
+  }
+
+  const [lat, lng] = state.currentPos;
+  const n = state.points.length + 1;
+
+  // Visual feedback on button
+  const btn = document.getElementById('btn-mark');
+  btn.classList.add('locking');
+  setTimeout(() => btn.classList.remove('locking'), 650);
+
+  // Place numbered node marker
+  const icon = L.divIcon({
+    html: `<div style="
+      width:26px;height:26px;
+      background:var(--cyan);
+      border:2px solid #fff;
+      border-radius:50%;
+      box-shadow:0 0 10px var(--cyan),0 0 20px rgba(0,229,255,0.4);
+      display:flex;align-items:center;justify-content:center;
+      font-family:'Orbitron',monospace;font-size:9px;font-weight:700;
+      color:#000;
+    ">${n}</div>`,
+    className: '', iconSize:[26,26], iconAnchor:[13,13]
+  });
+
+  const marker = L.marker([lat, lng], { icon }).addTo(map);
+  marker.bindTooltip(`Node ${n}<br>${lat.toFixed(6)}, ${lng.toFixed(6)}`, { permanent:false });
+  state.markers.push(marker);
+  state.points.push([lat, lng]);
+
+  updatePreview();
+  updateUI();
+
+  showToast(`📍 Node ${n} marked at ±${Math.round(state.currentPos._acc || 0)}m`, 'info');
+}
+
+// ─── Pulse Marker (static, for existing parcels label) ───
 function addPulseMarker(latlng) {
   const icon = L.divIcon({
     html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
@@ -763,70 +886,30 @@ function addPulseMarker(latlng) {
   L.marker(latlng, { icon, interactive:false }).addTo(map);
 }
 
-// ─── Claim Point Logic ────────────────────────────────
-function addClaimPoint(latlng) {
-  state.points.push(latlng);
-
-  // Node marker
-  const icon = L.divIcon({
-    html: `<div style="width:10px;height:10px;background:var(--cyan);border:2px solid #fff;border-radius:50%;box-shadow:0 0 6px var(--cyan)"></div>`,
-    className: '', iconSize:[10,10], iconAnchor:[5,5]
-  });
-  const marker = L.marker(latlng, { icon }).addTo(map);
-  state.markers.push(marker);
-
-  updatePreview();
-  updateUI();
-}
-
+// ─── Preview polyline ─────────────────────────────────
 function updatePreview() {
   if (state.polyline) map.removeLayer(state.polyline);
   if (state.points.length < 2) return;
-
-  const pts = state.isClaiming && state.points.length >= 2
+  const pts = state.points.length >= 3
     ? [...state.points, state.points[0]]
     : state.points;
-
   state.polyline = L.polyline(pts, {
-    color: '#00e5ff',
-    weight: 2,
-    dashArray: '6 4',
-    opacity: 0.85
+    color: '#00e5ff', weight: 2, dashArray: '6 4', opacity: 0.85
   }).addTo(map);
 }
 
+// ─── UI sync ──────────────────────────────────────────
 function updateUI() {
   const n = state.points.length;
   document.getElementById('pts-count').textContent = n;
-  document.getElementById('pts-badge').style.display = n > 0 ? 'block' : 'none';
   document.getElementById('btn-finish').disabled = n < 3;
 
   if (n === 0) {
-    setStatus('TAP MAP TO PLACE NODES', '');
+    setStatus('WALK TO A CORNER — PRESS MARK HERE', '');
   } else if (n < 3) {
-    setStatus(`${n} NODE${n>1?'S':''} PLACED — NEED ${3-n} MORE`, '');
+    setStatus(`NODE ${n} LOCKED ✓ — WALK TO NEXT CORNER`, '');
   } else {
-    setStatus(`${n} NODES — READY TO CLOSE POLYGON ✓`, '');
-  }
-}
-
-// ─── Toggle claiming mode ─────────────────────────────
-function toggleClaiming() {
-  state.isClaiming = !state.isClaiming;
-  const btn = document.getElementById('btn-start');
-
-  if (state.isClaiming) {
-    btn.innerHTML = '<span class="btn-icon">⏸</span> Pause';
-    btn.style.background = 'linear-gradient(135deg,#003d6b,#006bb3)';
-    btn.style.borderColor = '#0090e0';
-    btn.style.color = '#fff';
-    setStatus('CLAIMING ACTIVE — TAP TO PLACE NODES', '');
-    showToast('Claiming mode ON. Tap the map!', 'info');
-  } else {
-    btn.innerHTML = '<span class="btn-icon">📍</span> Start Claim';
-    btn.style.cssText = '';
-    btn.className = 'btn-tycoon btn-start';
-    setStatus('CLAIMING PAUSED', '');
+    setStatus(`${n} NODES — PRESS FINISH OR KEEP WALKING`, '');
   }
 }
 
@@ -836,10 +919,10 @@ function clearPoints() {
   state.markers.forEach(m => map.removeLayer(m));
   state.markers = [];
   if (state.polyline) { map.removeLayer(state.polyline); state.polyline = null; }
-  if (!state.isClaiming) setStatus('TAP MAP TO BEGIN CLAIMING LAND', '');
-  else setStatus('CLEARED — TAP MAP TO PLACE NODES', '');
-  document.getElementById('pts-badge').style.display = 'none';
+  document.getElementById('pts-count').textContent = '0';
   document.getElementById('btn-finish').disabled = true;
+  if (state.gpsReady) setStatus('CLEARED — WALK TO FIRST CORNER & MARK HERE', '');
+  else setStatus('ACQUIRING GPS SIGNAL…', '');
 }
 
 // ─── Finish polygon & check overlaps ──────────────────
@@ -965,9 +1048,7 @@ async function submitClaim() {
     cancelModal();
     clearPoints();
 
-    if (state.isClaiming) toggleClaiming(); // auto-stop claiming
-
-    setStatus('PARCEL REGISTERED SUCCESSFULLY ✓', 'success');
+    setStatus('PARCEL REGISTERED ✓ — WALK TO NEXT CLAIM', 'success');
     showToast(`🏛 "${titleNo}" claimed for $${value.toLocaleString()}!`, 'gold');
 
   } catch(err) {
@@ -1132,15 +1213,20 @@ function getDeviceId() {
 
 // ─── Boot sequence ────────────────────────────────────
 window.addEventListener('load', async () => {
-  await new Promise(r => setTimeout(r, 2000)); // loading animation
+  // Disable mark button until GPS is ready
+  document.getElementById('btn-mark').disabled = true;
 
+  await new Promise(r => setTimeout(r, 2000));
   const ls = document.getElementById('loading-screen');
   ls.classList.add('fade-out');
   setTimeout(() => ls.remove(), 700);
 
   await loadExistingParcels();
-  setStatus('TAP MAP TO BEGIN CLAIMING LAND', '');
-  showToast('🏛 Welcome, Land Tycoon!', 'gold');
+
+  // Start continuous GPS watch
+  startGPSWatch();
+
+  showToast('🏛 Welcome, Land Tycoon! Walk your land!', 'gold');
 });
 </script>
 </body>

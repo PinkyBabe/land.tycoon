@@ -418,6 +418,7 @@ function showChatDialog(deviceId, fallbackPos, name, avatarUrl, message) {
 
   const icon = L.divIcon({
     html: `<div style="
+      width:240px;
       background:rgba(10,15,28,0.92);
       border:1px solid rgba(240,165,0,0.55);
       border-radius:12px;
@@ -426,8 +427,8 @@ function showChatDialog(deviceId, fallbackPos, name, avatarUrl, message) {
       font-size:13px;
       color:var(--text);
       box-shadow:0 0 18px rgba(240,165,0,0.18);
-      max-width:240px;
       line-height:1.25;
+      white-space:normal;
     ">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
         <div style="width:26px;height:26px;border-radius:50%;overflow:hidden;border:2px solid rgba(0,229,255,0.55);flex:0 0 auto;background:rgba(0,229,255,0.08)">
@@ -440,7 +441,9 @@ function showChatDialog(deviceId, fallbackPos, name, avatarUrl, message) {
       <div style="word-wrap:break-word;white-space:pre-wrap">${safeMsg}</div>
     </div>`,
     className: '',
-    iconAnchor: [0, 0]
+    // Give Leaflet a real box so text doesn't wrap vertically.
+    iconSize: [240, 86],
+    iconAnchor: [120, 86]
   });
   const m = L.marker([lat, lng], { icon, interactive:false, zIndexOffset:1100 }).addTo(map);
   setTimeout(() => { try { map.removeLayer(m); } catch(_) {} }, 5000);
@@ -916,15 +919,20 @@ function createFaceIcon(avatarUrl, displayName, isSelf=false) {
   const safeUrl  = escapeHtml_(avatarUrl || '');
   const ring = isSelf ? 'style="border-color: rgba(240,165,0,0.95); box-shadow: 0 0 20px rgba(240,165,0,0.28), 0 0 40px rgba(240,165,0,0.14)"' : '';
   const html = `
-    <div style="display:flex;flex-direction:column;align-items:center;min-width:120px">
+    <div style="display:flex;flex-direction:column;align-items:center;width:140px;pointer-events:none">
       <div class="user-face-marker" ${ring}>
         <img src="${safeUrl}" alt="face" onerror="this.style.display='none'">
       </div>
-      <div class="user-face-label" style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${safeName}</div>
+      <div class="user-face-label" style="
+        width:140px;
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      ">${safeName}</div>
     </div>
   `;
-  // Wider icon box prevents letter-by-letter wrapping.
-  return L.divIcon({ html, className:'', iconSize:[140, 64], iconAnchor:[70, 28] });
+  // Fixed-size icon box keeps label readable.
+  return L.divIcon({ html, className:'', iconSize:[140, 74], iconAnchor:[70, 32] });
 }
 
 function createSelfIcon() {

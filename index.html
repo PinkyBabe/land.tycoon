@@ -15,7 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
 
-<style>
+<style>@import url('style.css');</style><!--
 /* ═══════════════════════════════════════════════════
    LAND TYCOON — Core Design System
    Aesthetic: Imperial Cyber-Gold — dark empire meets
@@ -72,6 +72,78 @@ body::before {
     rgba(0,0,0,0.04) 2px,
     rgba(0,0,0,0.04) 4px
   );
+}
+
+/* ── PROFILE CHIP + AVATARS ───────────────────────── */
+.profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(240,165,0,0.35);
+  background: rgba(240,165,0,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px rgba(240,165,0,0.12);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+.profile-chip:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.profile-chip:active { transform: scale(0.98); }
+.avatar-circle {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.65);
+  box-shadow: 0 0 18px rgba(0,229,255,0.18);
+  background: rgba(0,229,255,0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.avatar-circle img { width:100%; height:100%; object-fit:cover; display:block; }
+.profile-chip .profile-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.05;
+  min-width: 0;
+}
+.profile-chip .profile-name {
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+.profile-chip .profile-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ── ONLINE FACE MARKERS ───────────────────────────── */
+.user-face-marker {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,229,255,0.9);
+  box-shadow: 0 0 18px rgba(0,229,255,0.32), 0 0 34px rgba(0,229,255,0.16);
+  background: rgba(0,229,255,0.08);
+  overflow: hidden;
+}
+.user-face-marker img { width:100%; height:100%; object-fit:cover; display:block; }
+.user-face-label {
+  margin-top: 3px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(10,15,28,0.92);
+  border: 1px solid rgba(240,165,0,0.28);
+  color: var(--gold);
+  font-family: 'Orbitron', monospace;
+  font-size: 9px;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 0 12px rgba(240,165,0,0.12);
 }
 
 /* ── TOP HUD BAR ─────────────────────────────────── */
@@ -201,6 +273,7 @@ body::before {
   opacity: 0.45; cursor: not-allowed; transform: none;
   box-shadow: none; filter: grayscale(0.4);
 }
+.btn-mark.locking {
   background: linear-gradient(135deg, #004a00 0%, #007a00 100%);
   border-color: #00c800;
   box-shadow: 0 0 20px rgba(0,200,0,0.5);
@@ -282,6 +355,20 @@ body::before {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 #claim-modal-overlay.show { display: flex; }
+
+/* ── PROFILE MODAL (REGISTRATION) ─────────────────── */
+#profile-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200; /* above #loading-screen (1000) */
+  background: rgba(8,12,20,0.88);
+  backdrop-filter: blur(7px);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+#profile-modal-overlay.show { display: flex; }
 
 #claim-modal {
   width: 100%;
@@ -379,6 +466,7 @@ body::before {
   transition: border-color 0.2s, box-shadow 0.2s;
   margin-bottom: 14px;
   -webkit-appearance: none;
+  appearance: none;
 }
 
 .input-tycoon:focus {
@@ -619,7 +707,7 @@ body::before {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(240,165,0,0.3); border-radius: 2px; }
-</style>
+-->
 </head>
 <body>
 
@@ -648,6 +736,15 @@ body::before {
     <div class="stat-chip">
       <div class="label">AREA</div>
       <div class="value" id="stat-area">0 m²</div>
+    </div>
+  </div>
+  <div class="profile-chip" id="profile-chip" onclick="openProfileModal()">
+    <div class="avatar-circle">
+      <img id="profile-avatar-img" alt="Avatar"/>
+    </div>
+    <div class="profile-text">
+      <div class="profile-name" id="profile-name">Select Profile</div>
+      <div class="profile-sub" id="online-count">Online: —</div>
     </div>
   </div>
 </div>
@@ -727,17 +824,76 @@ body::before {
   </div>
 </div>
 
+<!-- ── PROFILE MODAL ──────────────────────────────── -->
+<div id="profile-modal-overlay" style="display:none">
+  <div id="claim-modal" style="max-width:520px">
+    <div class="modal-drag-handle"></div>
+    <div class="modal-title">🧑 Profile</div>
+    <div class="modal-subtitle">CHOOSE HOW OTHERS SEE YOU</div>
+
+    <label class="form-label-tycoon">Display Name</label>
+    <input class="input-tycoon" id="profile-name-input" type="text"
+           placeholder='e.g. "TycoonKing"'
+           maxlength="40" autocomplete="off"/>
+
+    <label class="form-label-tycoon">Choose a Character Display Photo</label>
+    <div id="avatar-grid" style="
+      display:grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 6px 0 14px;
+    "></div>
+
+    <label class="form-label-tycoon">Face Photo (Avatar URL)</label>
+    <input class="input-tycoon" id="profile-avatar-input" type="url"
+           placeholder='https://... (direct image link)'
+           maxlength="400" autocomplete="off"/>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:-4px 0 10px">
+      <input id="profile-photo-file" type="file" accept="image/*" capture="user" style="display:none"/>
+      <button type="button" class="btn-tycoon" style="max-width:none;min-height:44px" onclick="triggerPhotoPick()">
+        📷 Take/Choose Photo
+      </button>
+      <button type="button" class="btn-tycoon" style="max-width:none;min-height:44px" onclick="addCurrentToGallery()">
+        ➕ Add to Gallery
+      </button>
+      <button type="button" class="btn-tycoon" style="max-width:none;min-height:44px" onclick="resetToDefaultAvatars()">
+        ♻ Reset Gallery
+      </button>
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:center;margin:10px 0 14px">
+      <div class="avatar-circle" style="width:44px;height:44px">
+        <img id="profile-preview-img" alt="Preview"/>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:1.3">
+        Tip: Pick a character from the gallery, paste a URL, or take a photo.<br/>
+        Photos are compressed so other users can still see them.
+      </div>
+    </div>
+
+    <button class="btn-submit-claim" id="btn-save-profile" onclick="saveProfile()">
+      SAVE PROFILE
+    </button>
+    <button class="btn-cancel-claim" id="btn-skip-profile" onclick="closeProfileModal()">
+      ✕ Not now
+    </button>
+  </div>
+</div>
+
 <!-- ── TOAST CONTAINER ─────────────────────────────── -->
 <div id="toast-container"></div>
 
 <!-- ══════════════════════════════════════════════════
      JAVASCRIPT — LAND TYCOON ENGINE
 ══════════════════════════════════════════════════════ -->
-<script>
+<script src="app.js" defer></script>
+<!--
 // ╔═══════════════════════════════════════════════════╗
 // ║  CONFIG — replace with your Apps Script URL       ║
 // ╚═══════════════════════════════════════════════════╝
 const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE";
+const AVATAR_FOLDER_ID = "1UoskrRd1X4KC1R5tXJUtDslxo5W0pIzV";
 
 // ─── State ────────────────────────────────────────────
 const state = {
@@ -751,6 +907,12 @@ const state = {
   pendingCoords: null,
   pendingArea:   0,
   deviceId:      getDeviceId(),
+  profile:       getProfile(),
+  registered:    isRegistered_(),
+  remoteAvatars: null,      // [{id,name,url,mimeType}, ...]
+  otherUsers:    new Map(), // deviceId -> Leaflet marker
+  lastHeartbeatAt: 0,
+  onlinePollTimer: null,
   portfolio:     { parcels:0, value:0, area:0 },
   owners:        {},
   gpsReady:      false,
@@ -803,10 +965,7 @@ function onGPSUpdate(pos) {
   if (state.liveMarker) map.removeLayer(state.liveMarker);
   if (state.liveAccCircle) map.removeLayer(state.liveAccCircle);
 
-  const icon = L.divIcon({
-    html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
-    className: '', iconSize:[16,16], iconAnchor:[8,8]
-  });
+  const icon = createSelfIcon();
   state.liveMarker    = L.marker([lat, lng], { icon, interactive:false, zIndexOffset:1000 }).addTo(map);
   state.liveAccCircle = L.circle([lat, lng], {
     radius: accuracy,
@@ -824,6 +983,9 @@ function onGPSUpdate(pos) {
     showToast(`📡 GPS locked! ±${Math.round(accuracy)}m accuracy`, 'info');
     document.getElementById('btn-mark').disabled = false;
   }
+
+  // Presence + live location (throttled)
+  heartbeatIfDue(lat, lng);
 }
 
 function onGPSError(err) {
@@ -1161,6 +1323,350 @@ async function loadExistingParcels() {
   }
 }
 
+// ─── Profile + Online Users (faces on markers) ────────────────
+function getProfile() {
+  const displayName = (localStorage.getItem('lt_profile_name') || '').trim();
+  const avatarUrl   = (localStorage.getItem('lt_profile_avatar') || '').trim();
+  return {
+    displayName: displayName || ('Tycoon ' + stateOrRandomSuffix_()),
+    avatarUrl
+  };
+}
+
+function isRegistered_() {
+  return localStorage.getItem('lt_profile_registered') === '1';
+}
+
+function stateOrRandomSuffix_() {
+  const existing = localStorage.getItem('lt_profile_suffix');
+  if (existing) return existing;
+  const s = Math.random().toString(36).slice(2, 6).toUpperCase();
+  localStorage.setItem('lt_profile_suffix', s);
+  return s;
+}
+
+function setProfile(profile) {
+  state.profile = {
+    displayName: (profile.displayName || '').trim(),
+    avatarUrl: (profile.avatarUrl || '').trim()
+  };
+  localStorage.setItem('lt_profile_name', state.profile.displayName);
+  localStorage.setItem('lt_profile_avatar', state.profile.avatarUrl);
+  renderProfileChip();
+}
+
+async function loadRemoteAvatars_() {
+  if (state.remoteAvatars) return state.remoteAvatars;
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') return null;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + `?action=avatars&folderId=${encodeURIComponent(AVATAR_FOLDER_ID)}`);
+    const data = await res.json();
+    if (data.status !== 'ok' || !Array.isArray(data.avatars)) return null;
+    state.remoteAvatars = data.avatars
+      .filter(a => a && a.url && a.name)
+      .slice(0, 40); // keep UI snappy
+    return state.remoteAvatars;
+  } catch (e) {
+    console.warn('Could not load avatar list:', e);
+    return null;
+  }
+}
+
+function initials_(name) {
+  const parts = String(name || '').split(/\s+/).filter(Boolean).slice(0, 2);
+  return parts.map(p => p[0].toUpperCase()).join('');
+}
+
+function escapeXml_(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+  }[c]));
+}
+
+function renderAvatarGrid_() {
+  const grid = document.getElementById('avatar-grid');
+  if (!grid) return;
+
+  const render = (avatars) => {
+    grid.innerHTML = avatars.map((a, idx) => `
+    <button type="button" class="btn-tycoon" data-avatar-idx="${idx}" style="
+      max-width:none;
+      padding:0;
+      border-radius:12px;
+      border:1px solid rgba(240,165,0,0.22);
+      background: rgba(255,255,255,0.03);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      min-height: 86px;
+    ">
+      <div style="width:44px;height:44px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.55)">
+        <img src="${escapeHtml_(a.preview || a.url)}" alt="${escapeHtml_(a.name)}" style="width:100%;height:100%;object-fit:cover;display:block"/>
+      </div>
+      <div style="font-family:'Orbitron',monospace;font-size:9px;color:var(--text);line-height:1.05;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">
+        ${escapeHtml_(a.name)}
+      </div>
+    </button>
+  `).join('');
+
+    grid.onclick = (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button[data-avatar-idx]') : null;
+    if (!btn) return;
+    const idx = parseInt(btn.getAttribute('data-avatar-idx'), 10);
+    const chosen = avatars[idx];
+    if (!chosen) return;
+    document.getElementById('profile-avatar-input').value = chosen.url || '';
+    syncProfilePreview();
+  };
+  };
+
+  // Initial: show loading tiles while fetching
+  grid.innerHTML = `<div style="grid-column:1/-1;color:var(--text-dim);font-size:12px">Loading characters…</div>`;
+
+  loadRemoteAvatars_().then((remote) => {
+    if (remote && remote.length) {
+      const avatars = remote.map(a => ({ name: a.name, url: a.url }));
+      render(avatars);
+      return;
+    }
+    // Fallback placeholders if backend not set
+    const fallback = [
+      { series: 'Solo Leveling', name: 'Sung Jin-Woo' },
+      { series: 'Solo Leveling', name: 'Cha Hae-In' },
+      { series: 'Baki', name: 'Baki Hanma' },
+      { series: 'Baki', name: 'Yujiro Hanma' },
+      { series: 'Gamble', name: 'Yumeko' },
+      { series: 'Gamble', name: 'Kaiji' },
+    ].map(a => ({
+      name: `${a.series} — ${a.name}`,
+      url: '',
+      preview: ('data:image/svg+xml;utf8,' + encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120">
+          <defs>
+            <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stop-color="#0a0f1c"/>
+              <stop offset="1" stop-color="#111a2e"/>
+            </linearGradient>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#g)"/>
+          <circle cx="60" cy="54" r="26" fill="#00e5ff" opacity="0.18"/>
+          <text x="60" y="62" font-family="Orbitron, Arial" font-size="26" fill="#f0a500" text-anchor="middle">${escapeXml_(initials_(a.name))}</text>
+          <text x="60" y="100" font-family="Rajdhani, Arial" font-size="12" fill="#8a8270" text-anchor="middle">${escapeXml_(a.series)}</text>
+        </svg>`
+      ))
+    }));
+    render(fallback);
+  });
+}
+
+function renderProfileChip() {
+  const nameEl = document.getElementById('profile-name');
+  const imgEl  = document.getElementById('profile-avatar-img');
+  nameEl.textContent = state.profile.displayName || 'Select Profile';
+
+  const url = (state.profile.avatarUrl || '').trim();
+  if (url) {
+    imgEl.src = url;
+  } else {
+    // simple inline placeholder (no external calls)
+    imgEl.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64">
+        <rect width="100%" height="100%" fill="#0a0f1c"/>
+        <circle cx="32" cy="26" r="12" fill="#00e5ff" opacity="0.65"/>
+        <rect x="14" y="40" width="36" height="18" rx="9" fill="#f0a500" opacity="0.55"/>
+      </svg>`
+    );
+  }
+}
+
+function openProfileModal() {
+  const overlay = document.getElementById('profile-modal-overlay');
+  overlay.classList.add('show');
+  document.getElementById('profile-name-input').value = state.profile.displayName || '';
+  document.getElementById('profile-avatar-input').value = state.profile.avatarUrl || '';
+  renderAvatarGrid_();
+  syncProfilePreview();
+  setTimeout(() => document.getElementById('profile-name-input').focus(), 200);
+
+  // If this is first-run registration, make it feel mandatory.
+  const skipBtn = document.getElementById('btn-skip-profile');
+  if (skipBtn) skipBtn.style.display = state.registered ? 'block' : 'none';
+}
+
+function closeProfileModal() {
+  if (!state.registered) {
+    showToast('📝 Please register your profile to start.', 'error');
+    return;
+  }
+  const overlay = document.getElementById('profile-modal-overlay');
+  overlay.classList.remove('show');
+}
+
+function syncProfilePreview() {
+  const url = (document.getElementById('profile-avatar-input').value || '').trim();
+  const img = document.getElementById('profile-preview-img');
+  if (url) img.src = url;
+  else img.src = document.getElementById('profile-avatar-img').src;
+}
+
+async function saveProfile() {
+  const btn = document.getElementById('btn-save-profile');
+  btn.disabled = true;
+  btn.textContent = 'SAVING…';
+  try {
+    const displayName = (document.getElementById('profile-name-input').value || '').trim();
+    const avatarUrl   = (document.getElementById('profile-avatar-input').value || '').trim();
+    if (!displayName) { showToast('Please enter a display name.', 'error'); return; }
+    setProfile({ displayName, avatarUrl });
+    state.registered = true;
+    localStorage.setItem('lt_profile_registered', '1');
+
+    await postToSheet({
+      action: 'setProfile',
+      deviceId: state.deviceId,
+      displayName: state.profile.displayName,
+      avatarUrl: state.profile.avatarUrl
+    });
+
+    // refresh self marker icon immediately if GPS already running
+    if (state.gpsReady && state.currentPos) onGPSUpdate({ coords: { latitude: state.currentPos[0], longitude: state.currentPos[1], accuracy: 0 } });
+
+    closeProfileModal();
+    showToast('✅ Profile saved!', 'info');
+  } catch (e) {
+    console.warn(e);
+    showToast('⚠ Could not save profile to server.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'SAVE PROFILE';
+  }
+}
+
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'profile-avatar-input') syncProfilePreview();
+});
+
+function escapeHtml_(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+  }[c]));
+}
+
+function createFaceIcon(avatarUrl, displayName, isSelf=false) {
+  const safeName = escapeHtml_(displayName || 'Tycoon');
+  const safeUrl  = escapeHtml_(avatarUrl || '');
+  const ring = isSelf ? 'style="border-color: rgba(240,165,0,0.95); box-shadow: 0 0 20px rgba(240,165,0,0.28), 0 0 40px rgba(240,165,0,0.14)"' : '';
+  const html = `
+    <div style="display:flex;flex-direction:column;align-items:center">
+      <div class="user-face-marker" ${ring}>
+        <img src="${safeUrl}" alt="face" onerror="this.style.display='none'">
+      </div>
+      <div class="user-face-label">${safeName}</div>
+    </div>
+  `;
+  return L.divIcon({ html, className:'', iconSize:[48, 54], iconAnchor:[24, 27] });
+}
+
+function createSelfIcon() {
+  const p = state.profile || {};
+  if (p.avatarUrl) return createFaceIcon(p.avatarUrl, p.displayName || 'You', true);
+  return L.divIcon({
+    html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
+    className: '', iconSize:[16,16], iconAnchor:[8,8]
+  });
+}
+
+function heartbeatIfDue(lat, lng) {
+  const now = Date.now();
+  if (now - (state.lastHeartbeatAt || 0) < 12000) return; // ~12s
+  state.lastHeartbeatAt = now;
+  postToSheet({
+    action: 'heartbeat',
+    deviceId: state.deviceId,
+    displayName: state.profile.displayName,
+    avatarUrl: state.profile.avatarUrl,
+    lat, lng
+  }).catch(() => {});
+}
+
+async function fetchOnlineUsers() {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') return [];
+  const res = await fetch(APPS_SCRIPT_URL + '?action=onlineUsers');
+  const data = await res.json();
+  if (data.status !== 'ok') return [];
+  return Array.isArray(data.users) ? data.users : [];
+}
+
+function updateOnlineCount(n) {
+  const el = document.getElementById('online-count');
+  el.textContent = 'Online: ' + (typeof n === 'number' ? n : '—');
+}
+
+function renderOnlineUsers(users) {
+  const nowIds = new Set();
+  users.forEach(u => {
+    if (!u || !u.deviceId) return;
+    nowIds.add(String(u.deviceId));
+  });
+
+  // Remove markers that are no longer online
+  for (const [id, marker] of state.otherUsers.entries()) {
+    if (!nowIds.has(id)) {
+      try { map.removeLayer(marker); } catch(_) {}
+      state.otherUsers.delete(id);
+    }
+  }
+
+  // Add/update online markers
+  users.forEach(u => {
+    const id = String(u.deviceId || '');
+    if (!id) return;
+    if (id === String(state.deviceId)) return; // don't duplicate self
+    const lat = parseFloat(u.lat);
+    const lng = parseFloat(u.lng);
+    if (!isFinite(lat) || !isFinite(lng)) return;
+
+    const icon = (u.avatarUrl || '').trim()
+      ? createFaceIcon(u.avatarUrl, u.displayName || 'Tycoon')
+      : L.divIcon({
+          html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
+          className: '', iconSize:[16,16], iconAnchor:[8,8]
+        });
+
+    const existing = state.otherUsers.get(id);
+    if (!existing) {
+      const m = L.marker([lat, lng], { icon, interactive:false, zIndexOffset:900 }).addTo(map);
+      state.otherUsers.set(id, m);
+    } else {
+      existing.setLatLng([lat, lng]);
+      existing.setIcon(icon);
+    }
+  });
+}
+
+function startOnlineLoop() {
+  if (state.onlinePollTimer) clearInterval(state.onlinePollTimer);
+  // fast initial paint
+  (async () => {
+    try {
+      const users = await fetchOnlineUsers();
+      updateOnlineCount(users.length);
+      renderOnlineUsers(users);
+    } catch(_) {}
+  })();
+
+  state.onlinePollTimer = setInterval(async () => {
+    try {
+      const users = await fetchOnlineUsers();
+      updateOnlineCount(users.length);
+      renderOnlineUsers(users);
+    } catch(_) {}
+  }, 7000);
+}
+
 // ─── HUD Update ───────────────────────────────────────
 function updateStatsHUD() {
   document.getElementById('stat-parcels').textContent = state.portfolio.parcels;
@@ -1220,6 +1726,14 @@ window.addEventListener('load', async () => {
   // Disable mark button until GPS is ready
   document.getElementById('btn-mark').disabled = true;
 
+  // Profile chip render
+  renderProfileChip();
+  state.registered = isRegistered_();
+  if (!state.registered) {
+    // Initial appearance: registration first
+    openProfileModal();
+  }
+
   await new Promise(r => setTimeout(r, 2000));
   const ls = document.getElementById('loading-screen');
   ls.classList.add('fade-out');
@@ -1230,8 +1744,11 @@ window.addEventListener('load', async () => {
   // Start continuous GPS watch
   startGPSWatch();
 
+  // Start online user polling (others' face markers)
+  startOnlineLoop();
+
   showToast('🏛 Welcome, Land Tycoon! Walk your land!', 'gold');
 });
-</script>
+-->
 </body>
 </html>

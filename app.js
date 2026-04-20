@@ -46,6 +46,14 @@ L.tileLayer(
   { subdomains:['mt0','mt1','mt2','mt3'], maxZoom: 21 }
 ).addTo(map);
 
+/** White discs at each vertex of registered parcels (display-only “mohon”). */
+const PARCEL_VERTEX_ICON = L.divIcon({
+  html: '<div class="lt-parcel-mohon"></div>',
+  className: 'lt-parcel-mohon-wrap',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
 // ─── Live GPS Watch ───────────────────────────────────
 function startGPSWatch() {
   if (!navigator.geolocation) {
@@ -125,19 +133,12 @@ function markHere() {
   btn.classList.add('locking');
   setTimeout(() => btn.classList.remove('locking'), 650);
 
-  // Place numbered node marker
+  // Place numbered node marker (white disc + mono index, similar to clean map UIs)
   const icon = L.divIcon({
-    html: `<div style="
-      width:26px;height:26px;
-      background:var(--cyan);
-      border:2px solid #fff;
-      border-radius:50%;
-      box-shadow:0 0 10px var(--cyan),0 0 20px rgba(0,229,255,0.4);
-      display:flex;align-items:center;justify-content:center;
-      font-family:'Orbitron',monospace;font-size:9px;font-weight:700;
-      color:#000;
-    ">${n}</div>`,
-    className: '', iconSize:[26,26], iconAnchor:[13,13]
+    html: `<div class="lt-node-marker">${n}</div>`,
+    className: 'lt-node-marker-wrap',
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
   });
 
   const marker = L.marker([lat, lng], { icon }).addTo(map);
@@ -155,7 +156,9 @@ function markHere() {
 function addPulseMarker(latlng) {
   const icon = L.divIcon({
     html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
-    className: '', iconSize:[16,16], iconAnchor:[8,8]
+    className: 'lt-pulse-marker-wrap',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
   });
   L.marker(latlng, { icon, interactive:false }).addTo(map);
 }
@@ -345,6 +348,15 @@ function drawParcel(coords, titleNo, owner, value, area) {
     fillOpacity: 0.2,
     weight: 2
   }).addTo(map);
+
+  coords.forEach(([lat, lng]) => {
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    L.marker([lat, lng], {
+      icon: PARCEL_VERTEX_ICON,
+      interactive: false,
+      zIndexOffset: 450,
+    }).addTo(map);
+  });
 
   layer.bindPopup(`
     <div style="font-family:'Rajdhani',sans-serif;min-width:160px">
@@ -798,7 +810,9 @@ function createSelfIcon() {
   if (p.avatarUrl) return createFaceIcon(p.avatarUrl, p.displayName || 'You', true);
   return L.divIcon({
     html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
-    className: '', iconSize:[16,16], iconAnchor:[8,8]
+    className: 'lt-pulse-marker-wrap',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
   });
 }
 
@@ -854,7 +868,9 @@ function renderOnlineUsers(users) {
       ? createFaceIcon(u.avatarUrl, u.displayName || 'Tycoon')
       : L.divIcon({
           html: `<div class="pulse-marker"><div class="pulse-dot"></div><div class="pulse-ring"></div></div>`,
-          className: '', iconSize:[16,16], iconAnchor:[8,8]
+          className: 'lt-pulse-marker-wrap',
+          iconSize: [16, 16],
+          iconAnchor: [8, 8],
         });
 
     const existing = state.otherUsers.get(id);
@@ -942,7 +958,14 @@ function getDeviceId() {
 }
 
 // ─── Boot sequence ────────────────────────────────────
-window.addEventListener('load', async () => {
+function hideLoadingScreen() {
+  const ls = document.getElementById('loading-screen');
+  if (!ls) return;
+  ls.classList.add('fade-out');
+  setTimeout(() => ls.remove(), 700);
+}
+
+function bootApp() {
   document.getElementById('btn-mark').disabled = true;
 
   renderProfileChip();
@@ -951,18 +974,24 @@ window.addEventListener('load', async () => {
     openProfileModal();
   }
 
-  const ok = await pingServer_();
-  if (!ok) showToast('⚠ Server not connected. Set APPS_SCRIPT_URL and deploy web app.', 'error');
+  pingServer_().then((ok) => {
+    if (!ok) showToast('⚠ Server not connected. Set APPS_SCRIPT_URL and deploy web app.', 'error');
+  });
 
-  await new Promise(r => setTimeout(r, 2000));
-  const ls = document.getElementById('loading-screen');
-  ls.classList.add('fade-out');
-  setTimeout(() => ls.remove(), 700);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(hideLoadingScreen);
+  });
 
-  await loadExistingParcels();
   startGPSWatch();
   startOnlineLoop();
+  loadExistingParcels().catch(() => {});
 
   showToast('🏛 Welcome, Land Tycoon! Walk your land!', 'gold');
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  bootApp();
+}
 
